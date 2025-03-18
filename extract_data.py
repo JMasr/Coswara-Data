@@ -46,7 +46,6 @@ def unzip_files(infile: list, all_file_temp: str, extracted_data_dir: str) -> bo
         logging.error(f"Error occurred: {e}")
         return False
 
-from concurrent.futures import ThreadPoolExecutor
 
 def extract_coswara(
         coswara_dir_path: str = os.path.abspath('.')
@@ -163,17 +162,15 @@ def get_coswara_subset_by_filters(
         dataframe: pd.DataFrame,
         filters: dict,
         output_dir: str = os.path.abspath('.'),
+        prefix_name: str = 'coswara_subset'
 ) -> pd.DataFrame:
-    """
-    Get a subset of the Coswara dataset by applying filters
-    :param dataframe: Coswara dataset DataFrame
-    :param filters: Dictionary of filters
-    :param output_dir: Output directory to save the subset
-    :return: Subset of the Coswara dataset
-    """
-    coswara_subset = dataframe.copy()
+    df_, coswara_subset = dataframe.copy(), pd.DataFrame()
     for key, value in filters.items():
-        coswara_subset = coswara_subset[coswara_subset[key] == value]
+        if isinstance(value, list):
+            for item in value:
+                coswara_subset = pd.concat([coswara_subset, df_[df_[key] == item]])
+        else:
+            coswara_subset = df_[df_[key] == value]
 
     coswara_subset.reset_index(drop=True, inplace=True)
     coswara_subset = coswara_subset.drop_duplicates()
@@ -182,10 +179,8 @@ def get_coswara_subset_by_filters(
     coswara_subset.rename(columns={'covid_status': 'label', 'audio_path': 'path'}, inplace=True)
     coswara_subset['label'] = coswara_subset['label'].apply(lambda x: 0 if x == 'healthy' else 1)
 
-    prefix_name = '_'.join([f"{key}_{value}" for key, value in filters.items()])
     coswara_subset.to_csv(os.path.join(output_dir, f'coswara_subset-{prefix_name}.csv'), index=False)
-
-    print(f"Subset saved at {os.path.join(output_dir, f'coswara_subset-{prefix_name}.csv')}")
+    logging.info(f"Subset saved at {os.path.join(output_dir, f'coswara_subset-{prefix_name}.csv')}")
     return coswara_subset
 
 
@@ -194,5 +189,9 @@ if __name__ == "__main__":
     coswara_df = create_coswara_df()
 
     # Get all the cough samples {"audio_type": "cough-heavy", "audio_type": "cough-shallow"}
-    cough_samples = get_coswara_subset_by_filters(coswara_df, {"audio_type": "cough-heavy"})
-    vowel_a_samples = get_coswara_subset_by_filters(coswara_df, {"audio_type": "vowel-a"})
+    cough_samples = get_coswara_subset_by_filters(coswara_df,
+                                                  {"audio_type": ["cough-heavy", "cough-shallow"]},
+                                                  prefix_name="cough_samples")
+    vowel_a_samples = get_coswara_subset_by_filters(coswara_df,
+                                                    {"audio_type": "vowel-a"},
+                                                    prefix_name="vowel_a_samples")
